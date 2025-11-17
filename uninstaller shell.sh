@@ -1,0 +1,96 @@
+#!/bin/bash
+
+# 卸载工具脚本
+
+# 定义颜色代码
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+# 获取脚本所在目录
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+UNINSTALLER_DIR="$SCRIPT_DIR/etc/uninstaller_records"
+RECORD_FILE="$UNINSTALLER_DIR/directory_record.txt"
+
+# 创建专用记录目录（如果不存在）
+mkdir -p "$UNINSTALLER_DIR"
+
+# 检查是否有之前的记录
+if [ -f "$RECORD_FILE" ]; then
+    echo "检测到上次的存档记录。"
+    echo "请选择操作:"
+    echo "1. 重新检测并记录当前目录结构"
+    echo "2. 卸载所有记录的文件和目录（包括本脚本）"
+    echo "3. 退出"
+    read -p "请输入选择 (1/2/3): " choice
+    
+    case $choice in
+        1)
+            echo "开始重新检测目录结构..."
+            # 继续执行后面的检测代码
+            ;;
+        2)
+            echo -e "${RED}==============================================${NC}"
+            echo -e "${RED}警告：此操作不可逆！将永久删除以下内容：${NC}"
+            echo -e "${RED}1. 所有记录的文件和目录${NC}"
+            echo -e "${RED}2. 卸载记录本身${NC}"
+            echo -e "${RED}3. 本卸载脚本${NC}"
+            echo -e "${RED}==============================================${NC}"
+            
+            # 显示将要删除的内容预览
+            echo "即将删除的项目预览（前10项）："
+            head -n 10 "$RECORD_FILE"
+            [ $(wc -l < "$RECORD_FILE") -gt 10 ] && echo "...（共$(wc -l < "$RECORD_FILE")项）"
+            
+            read -p "您确定要继续卸载吗？此操作不可撤销！(y/N): " confirm
+            if [[ "$confirm" =~ ^[Yy]$ ]]; then
+                echo "开始卸载..."
+                # 读取记录文件并删除所有记录的项目
+                while IFS= read -r line; do
+                    if [ -e "$line" ]; then
+                        echo "正在删除: $line"
+                        rm -rf "$line"
+                    fi
+                done < "$RECORD_FILE"
+                
+                # 删除记录文件和专用目录
+                rm -f "$RECORD_FILE"
+                rmdir "$UNINSTALLER_DIR" 2>/dev/null
+                
+                # 最后删除脚本自身
+                echo "卸载完成，即将删除本脚本..."
+                rm -- "$0"
+                exit 0
+            else
+                echo "卸载操作已取消。"
+                exit 0
+            fi
+            ;;
+        3)
+            echo "操作已取消。"
+            exit 0
+            ;;
+        *)
+            echo "无效的选择，退出。"
+            exit 1
+            ;;
+    esac
+fi
+
+# 记录当前目录结构
+echo "正在检测并记录目录结构..."
+> "$RECORD_FILE"  # 清空或创建记录文件
+
+# 记录文件和目录，但不记录uninstaller_records目录本身
+find "$SCRIPT_DIR" -mindepth 1 | grep -v "$UNINSTALLER_DIR" | while read -r item; do
+    echo "$item" >> "$RECORD_FILE"
+done
+
+# 统计信息
+file_count=$(grep -v "/$" "$RECORD_FILE" | wc -l)
+dir_count=$(grep "/$" "$RECORD_FILE" | wc -l)
+
+echo "记录完成。"
+echo "文件数量: $file_count"
+echo "目录数量: $dir_count"
+echo "记录已保存到: $RECORD_FILE"
+echo "下次运行此脚本时将提示卸载选项。"
